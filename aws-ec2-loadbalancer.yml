@@ -131,7 +131,7 @@
 
   - name: "Downloading Files"
     get_url: 
-        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-Using-Ansible/main/index.html.j2"
+        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-in-AWS-EC2-Using-Ansible/main/index.html.j2"
         dest: "/root/"
     become: yes
 
@@ -162,7 +162,7 @@
 
   - name: "Downloading Files"
     get_url: 
-        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-Using-Ansible/main/haproxy.cfg.j2"
+        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-in-AWS-EC2-Using-Ansible/main/haproxy.cfg.j2"
         dest: "/root/"
 
   - name: "Configuring Backend Server"
