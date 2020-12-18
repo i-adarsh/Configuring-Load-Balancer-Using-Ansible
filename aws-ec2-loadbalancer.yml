@@ -1,0 +1,178 @@
+- hosts: "localhost"
+  vars_files: 
+  - instance.j2
+  - cred-adarsh-cli.yml
+  tasks:
+  - name: "Installing boto3"
+    pip:
+          name: boto3
+          state: present
+
+
+
+  - name: "Creating Security Group for Webserver"
+    ec2_group:
+      name: "{{ security_group_ws }}"
+      description: Security Group for WebServer allowing port for http and ssh
+      region: "{{ region }}"
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_secret_key }}"
+      rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: 0.0.0.0/0
+
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: 0.0.0.0/0
+
+
+
+  - name: "Creating Security Group for LoadBalancer"
+    ec2_group:
+      name: "{{ security_group_lb }}"
+      description: Security Group for LB Server allowing port for http and ssh
+      region: "{{ region }}"
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_secret_key }}"
+      rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: 0.0.0.0/0
+
+      - proto: all
+        cidr_ip: 0.0.0.0/0
+
+
+
+
+  - name: "Provisioning AWS EC2 Instance for Backend Server"
+    amazon.aws.ec2:
+          key_name: "{{ keypair }}"
+          group: "{{ security_group_ws }}"
+          instance_type: "{{ instance_type }}"
+          image: "{{ image }}"
+          wait: true
+          region: "{{ region }}"
+          instance_tags:
+              name: "{{ os_name_web }}"
+          vpc_subnet_id: "{{ vpc_subnet_id }}"
+          assign_public_ip: yes
+          count: "{{ count_web }}"
+          aws_access_key: "{{ aws_access_key }}"
+          aws_secret_key: "{{ aws_secret_key }}"
+    register: server
+  - debug:
+      var: server.instances[0].public_ip
+
+  - name: Add new instance to host group webserver
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      groupname: webserver
+    loop: "{{ server.instances }}"
+
+  - name: Wait for SSH to come up
+    wait_for:
+      host: "{{ item.public_dns_name }}"
+      port: 22
+      state: started
+    loop: "{{ server.instances }}"
+
+
+
+
+  - name: "Provisioning AWS EC2 Instance for LoadBalancer"
+    amazon.aws.ec2:
+          key_name: "{{ keypair }}"
+          group: "{{ security_group_lb }}"
+          instance_type: "{{ instance_type }}"
+          image: "{{ image }}"
+          wait: true
+          region: "{{ region }}"
+          instance_tags:
+              name: "{{ os_name }}"
+          vpc_subnet_id: "{{ vpc_subnet_id }}"
+          assign_public_ip: yes
+          count: "{{ count }}"
+          aws_access_key: "{{ aws_access_key }}"
+          aws_secret_key: "{{ aws_secret_key }}"
+    register: loadbalancer
+  - debug:
+      var: loadbalancer.instances[0].public_ip
+
+  - name: Wait for SSH to come up
+    wait_for:
+      host: "{{ item.public_dns_name }}"
+      port: 22
+      state: started
+    loop: "{{ loadbalancer.instances }}"
+
+  - name: Add new instance to host group webserver
+    add_host:
+      hostname: "{{ item.public_ip }}"
+      groupname: loadbalancer
+    loop: "{{ loadbalancer.instances }}"
+
+
+
+
+- hosts: "webserver"
+  become: true
+  become_user: root
+  tasks:
+  - name: "Installing Apache Webserver"
+    package:
+        name: "httpd"
+        state: present
+    become: yes
+
+  - name: "Downloading Files"
+    get_url: 
+        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-Using-Ansible/main/index.html.j2"
+        dest: "/root/"
+    become: yes
+
+  - name: "Copying Files"
+    template:
+        src: "index.html.j2"
+        dest: "/var/www/html/index.html"
+    register: coyping
+    become: yes
+
+  - name: "Starting Apache Webserver"
+    service: 
+        name: "httpd"
+        state: "restarted"
+    when: coyping.changed
+    become: yes
+
+
+
+- hosts: "loadbalancer"
+  become: true
+  become_user: root
+  tasks: 
+  - name: "Installing Loadbalancer Service"
+    package: 
+        name: "haproxy"
+        state: present
+
+  - name: "Downloading Files"
+    get_url: 
+        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-Using-Ansible/main/haproxy.cfg.j2"
+        dest: "/root/"
+
+  - name: "Configuring Backend Server"
+    template:
+        src: "haproxy.cfg.j2"
+        dest: "/etc/haproxy/haproxy.cfg"
+    register: configuring
+
+  - name: "Starting Loadbalancer Service"
+    service: 
+        name: "haproxy"
+        state: "restarted"
+    when: configuring.changed
