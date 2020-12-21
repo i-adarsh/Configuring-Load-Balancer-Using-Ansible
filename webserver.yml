@@ -1,0 +1,26 @@
+
+  - name: Installing Apache Webserver
+    package:
+        name: "httpd"
+        state: present
+    become: yes
+
+  - name: Downloading Files
+    get_url: 
+        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-in-AWS-EC2-Using-Ansible/main/index.html.j2"
+        dest: "/root/"
+    become: yes
+
+  - name: Copying Files
+    template:
+        src: "index.html.j2"
+        dest: "/var/www/html/index.html"
+    register: coyping
+    become: yes
+
+  - name: Starting Apache Webserver
+    service: 
+        name: "httpd"
+        state: "restarted"
+    when: coyping.changed
+    become: yes
