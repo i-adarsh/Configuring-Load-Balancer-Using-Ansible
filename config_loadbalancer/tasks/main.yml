@@ -1,0 +1,28 @@
+---
+# tasks file for config_loadbalancer
+
+  - name: Installing Loadbalancer Service
+    package: 
+        name: "haproxy"
+        state: present
+    become: yes
+
+  - name: "Downloading Files"
+    get_url: 
+        url: "https://raw.githubusercontent.com/i-adarsh/Configuring-Load-Balancer-in-AWS-EC2-Using-Ansible/main/haproxy.cfg.j2"
+        dest: "/root/"
+    become: yes
+
+  - name: Configuring Backend Server
+    template:
+        src: "haproxy.cfg.j2"
+        dest: "/etc/haproxy/haproxy.cfg"
+    register: configuring
+    become: yes
+
+  - name: Starting Loadbalancer Service
+    service: 
+        name: "haproxy"
+        state: "restarted"
+    when: configuring.changed
+    become: yes
